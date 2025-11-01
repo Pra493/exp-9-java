@@ -1,0 +1,160 @@
+// Part a: Spring DI using Java-based Configuration
+
+// Course.java
+public class Course {
+    private String name = "Java";
+    public String getName() { return name; }
+}
+
+// Student.java
+public class Student {
+    private Course course;
+    public Student(Course course) { this.course = course; }
+    public void showCourse() {
+        System.out.println("Student enrolled in: " + course.getName());
+    }
+}
+
+// AppConfig.java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+@Configuration
+public class AppConfig {
+    @Bean
+    public Course course() { return new Course(); }
+    @Bean
+    public Student student() { return new Student(course()); }
+}
+
+// Main.java
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+public class Main {
+    public static void main(String[] args) {
+        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
+        Student student = context.getBean(Student.class);
+        student.showCourse();
+        context.close();
+    }
+}
+
+// Part b: Hibernate Application for Student CRUD
+
+// Student.java
+import javax.persistence.*;
+@Entity
+@Table(name="student")
+public class Student {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
+    @Column(name="name")
+    private String name;
+    // getters and setters
+}
+
+// HibernateUtil.java
+import org.hibernate.SessionFactory;
+import org.hibernate.cfg.Configuration;
+public class HibernateUtil {
+    private static SessionFactory sessionFactory;
+    static {
+        sessionFactory = new Configuration().configure().addAnnotatedClass(Student.class).buildSessionFactory();
+    }
+    public static SessionFactory getSessionFactory() { return sessionFactory; }
+}
+
+// CRUDOperations.java
+import org.hibernate.Session;
+public class CRUDOperations {
+    public void createStudent(String name) {
+        Session session = HibernateUtil.getSessionFactory().openSession();
+        session.beginTransaction();
+        Student student = new Student();
+        student.setName(name);
+        session.save(student);
+        session.getTransaction().commit();
+        session.close();
+    }
+    public Student readStudent(int id) {
+        Session session = HibernateUtil.getSessionFactory().openSession();
+        Student student = session.get(Student.class, id);
+        session.close();
+        return student;
+    }
+    public void updateStudent(int id, String newName) {
+        Session session = HibernateUtil.getSessionFactory().openSession();
+        session.beginTransaction();
+        Student student = session.get(Student.class, id);
+        student.setName(newName);
+        session.update(student);
+        session.getTransaction().commit();
+        session.close();
+    }
+    public void deleteStudent(int id) {
+        Session session = HibernateUtil.getSessionFactory().openSession();
+        session.beginTransaction();
+        Student student = session.get(Student.class, id);
+        session.delete(student);
+        session.getTransaction().commit();
+        session.close();
+    }
+}
+
+// Part c: Spring + Hibernate Transaction Management
+
+// Account.java
+import javax.persistence.*;
+@Entity
+@Table(name="account")
+public class Account {
+    @Id
+    private int id;
+    @Column
+    private double balance;
+    // getters and setters
+}
+
+// Transaction.java
+import javax.persistence.*;
+@Entity
+@Table(name="transaction")
+public class Transaction {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int id;
+    @Column
+    private int fromAccount;
+    @Column
+    private int toAccount;
+    @Column
+    private double amount;
+    // getters and setters
+}
+
+// AccountService.java
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.hibernate.Session;
+@Service
+public class AccountService {
+    @Transactional
+    public void transferMoney(int fromId, int toId, double amount) {
+        Session session = HibernateUtil.getSessionFactory().getCurrentSession();
+
+        Account from = session.get(Account.class, fromId);
+        Account to = session.get(Account.class, toId);
+
+        if(from.getBalance() < amount) throw new RuntimeException("Insufficient Funds");
+
+        from.setBalance(from.getBalance() - amount);
+        to.setBalance(to.getBalance() + amount);
+        session.update(from);
+        session.update(to);
+
+        Transaction txn = new Transaction();
+        txn.setFromAccount(fromId);
+        txn.setToAccount(toId);
+        txn.setAmount(amount);
+        session.save(txn);
+    }
+}
